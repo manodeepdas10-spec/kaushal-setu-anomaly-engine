@@ -23,7 +23,7 @@ class TraineeOutcomePayload(BaseModel):
     job_changes: Optional[int] = Field(default=None, example=1)
     district: Optional[str] = Field(default=None, example="Pune")
     course_category: Optional[str] = Field(default=None, example="IT-ITeS")
-    qualification: Optional[str] = Field(default=None, example="Graduate")  # Fixed: Added missing feature
+    qualification: Optional[str] = Field(default=None, example="Graduate")
 
 
 @app.get("/health")
@@ -37,31 +37,34 @@ def predict_anomaly(payload: TraineeOutcomePayload):
         raise HTTPException(status_code=500, detail="AI Model pipeline is uninitialized.")
 
     try:
-        # Convert payload into DataFrame matching exact preprocessor format
+        # Convert payload into DataFrame matching preprocessor feature schema
         input_data = pd.DataFrame([{
             'salary': payload.salary,
             'retention_months': payload.retention_months,
             'job_changes': payload.job_changes,
             'district': payload.district,
             'course_category': payload.course_category,
-            'qualification': payload.qualification  # Fixed: Added missing feature
+            'qualification': payload.qualification
         }])
 
         # Predict: -1 indicates Anomaly, 1 indicates Normal
         prediction = model_pipeline.predict(input_data)[0]
-        score = float(model_pipeline.score_samples(input_data)[0])
+
+        # Calculate decision score: lower values in decision_function mean higher anomaly risk.
+        # Inverting (-1 *) turns high anomaly risk into a positive score for intuitive outputs.
+        raw_decision = model_pipeline.decision_function(input_data)[0]
+        anomaly_score = float(-1 * raw_decision)
 
         is_anomaly = bool(prediction == -1)
 
         return {
             "trainee_id": payload.trainee_id,
             "is_anomaly": is_anomaly,
-            "anomaly_score": round(score, 4),
+            "anomaly_score": round(anomaly_score, 4),
             "status_flag": "FLAGGED_FOR_AUDIT" if is_anomaly else "VERIFIED",
             "action_required": is_anomaly
         }
     except Exception as e:
-        # Catches transformation/feature mapping errors gracefully
         raise HTTPException(status_code=500, detail=f"Prediction execution error: {str(e)}")
 
 
