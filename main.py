@@ -132,7 +132,8 @@ def predict_fake_trainee(payload: TraineeIdentityPayload):
 
         prediction = int(identity_model_pipeline.predict(input_data))
         probabilities = identity_model_pipeline.predict_proba(input_data)
-        fraud_confidence = float(probabilities)
+        # [0][1] extracts the specific probability for Class 1 (Fake Trainee)
+        fraud_confidence = float(probabilities[0][1])
 
         is_fake = bool(prediction == 1)
 
