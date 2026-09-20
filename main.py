@@ -96,7 +96,31 @@ def predict_fake_trainee(payload: TraineeIdentityPayload):
         raise HTTPException(status_code=500, detail="Identity Verification AI Model pipeline is uninitialized.")
 
     try:
-        # Construct DataFrame matching the preprocessor definition in training script
+        # --- CRITICAL HACKATHON OVERRIDE SECURITY RULES ---
+        # Rule 1: If liveness check fails, bypass the model and flag immediately.
+        if payload.liveness_status == 0:
+            return {
+                "trainee_id": payload.trainee_id,
+                "is_fake_trainee": True,
+                "fraud_probability_score": 1.0000,
+                "status_flag": "IDENTITY_SUSPENDED_GHOST_ALERT",
+                "action_required": True,
+                "reason_degradation": "CRITICAL_BIOMETRIC_LIVENESS_FAILURE"
+            }
+
+        # Rule 2: If the face similarity is drastically low, flag immediately.
+        if payload.face_similarity_index < 0.40:
+            return {
+                "trainee_id": payload.trainee_id,
+                "is_fake_trainee": True,
+                "fraud_probability_score": 0.9800,
+                "status_flag": "IDENTITY_SUSPENDED_GHOST_ALERT",
+                "action_required": True,
+                "reason_degradation": "SEVERE_FACIAL_MISMATCH_THRESHOLD"
+            }
+        # --------------------------------------------------
+
+        # If it passes the strict security rules, let the machine learning model run its analysis
         input_data = pd.DataFrame([{
             'module_completion_speed': payload.module_completion_speed,
             'device_concurrency_count': payload.device_concurrency_count,
@@ -106,10 +130,9 @@ def predict_fake_trainee(payload: TraineeIdentityPayload):
             'training_center_id': payload.training_center_id
         }])
 
-        # 1 indicates Fraud/Fake Trainee profile, 0 indicates Authentic Trainee profile
-        prediction = int(identity_model_pipeline.predict(input_data)[0])
-        probabilities = identity_model_pipeline.predict_proba(input_data)[0]
-        fraud_confidence = float(probabilities[1])
+        prediction = int(identity_model_pipeline.predict(input_data))
+        probabilities = identity_model_pipeline.predict_proba(input_data)
+        fraud_confidence = float(probabilities)
 
         is_fake = bool(prediction == 1)
 
@@ -118,7 +141,8 @@ def predict_fake_trainee(payload: TraineeIdentityPayload):
             "is_fake_trainee": is_fake,
             "fraud_probability_score": round(fraud_confidence, 4),
             "status_flag": "IDENTITY_SUSPENDED_GHOST_ALERT" if is_fake else "IDENTITY_CLEAN",
-            "action_required": is_fake
+            "action_required": is_fake,
+            "reason_degradation": "ML_CLASSIFIER_DETERMINATION"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Identity Engine Exception: {str(e)}")
