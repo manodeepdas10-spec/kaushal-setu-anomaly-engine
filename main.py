@@ -130,10 +130,14 @@ def predict_fake_trainee(payload: TraineeIdentityPayload):
             'training_center_id': payload.training_center_id
         }])
 
-        prediction = int(identity_model_pipeline.predict(input_data))
+        # Let the machine learning model execute prediction steps
+        prediction = int(identity_model_pipeline.predict(input_data)[0])
         probabilities = identity_model_pipeline.predict_proba(input_data)
-        # [0][1] extracts the specific probability for Class 1 (Fake Trainee)
-        fraud_confidence = float(probabilities[0][1])
+
+        # --- THE BULLETPROOF EXTRACTOR FIX ---
+        # .item() cleanly converts any multidimensional array target into a native float
+        fraud_confidence = float(probabilities[0][1].item())
+        # -------------------------------------
 
         is_fake = bool(prediction == 1)
 
@@ -145,6 +149,7 @@ def predict_fake_trainee(payload: TraineeIdentityPayload):
             "action_required": is_fake,
             "reason_degradation": "ML_CLASSIFIER_DETERMINATION"
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Identity Engine Exception: {str(e)}")
 
